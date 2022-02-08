@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit.Chem.rdchem import Mol
+from rdkit.Chem.rdchem import Mol, Conformer
 from rdkit.Chem.rdmolfiles import MolFromSmiles
 
 from ..featurization.featurization_common_utils import one_hot_vector
@@ -57,8 +57,8 @@ def add_dummy_node(*, node_features: np.ndarray = None,
     return node_features, adj_matrix, dist_matrix, bond_features
 
 
-def build_position_matrix(molecule: Mol) -> np.ndarray:
-    conf = molecule.GetConformer()
+def build_position_matrix(molecule : Mol, conf : Conformer) -> np.ndarray:
+    # conf = molecule.GetConformer()
     return np.array(
         [
             [
@@ -89,17 +89,29 @@ def get_atom_features(atom) -> np.ndarray:
 
 
 def get_mol_from_smiles(smiles: str) -> Mol:
+
     mol = MolFromSmiles(smiles)
+
     try:
         mol = Chem.AddHs(mol)
-        AllChem.EmbedMolecule(mol, maxAttempts=5000)
-        AllChem.UFFOptimizeMolecule(mol)
+        
+        # AllChem.EmbedMolecule(mol, maxAttempts=5000)
+        # AllChem.UFFOptimizeMolecule(mol)
+        # mol = Chem.RemoveHs(mol)
+
+        #fixed by HJ
+        AllChem.EmbedMultipleConfs(mol, 100, maxAttempts=5000, randomSeed = 123)  # 원하는 수만큼 conformer pool 생성
+        li = AllChem.UFFOptimizeMoleculeConfs(mol, maxIters=2000)
+        tmp = min(li)
         mol = Chem.RemoveHs(mol)
+        conf = mol.GetConformer(li.index(tmp))
+
     except ValueError:
         mol = MolFromSmiles(smiles)
         AllChem.Compute2DCoords(mol)
+        conf = mol.GetConformer()
 
-    return mol
+    return mol, conf
 
 
 def build_adjacency_matrix(molecule: Mol) -> np.ndarray:
